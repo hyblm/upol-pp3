@@ -11,7 +11,7 @@
 
 (defmethod copy ((p point))
   (destructuring-bind (x y) (x-y p)
-  (point-with x y))
+  (point-with x y)))
 
 (defun point-with (x y)
   (set-x-y (make-instance 'point) x y))
@@ -27,6 +27,21 @@
    (vertex-b :initform (make-instance 'point))
    (vertex-c :initform (make-instance 'point))))
 
+(defmethod move ((tri triangle) dx dy)
+  (dolist (vertex (vertices-mut tri))
+    (move vertex dx dy))
+  tri)
+
+(defmethod rotate ((tri triangle) angle center)
+  (dolist (vertex (vertices-mut tri))
+    (rotate vertex angle center))
+  tri)
+
+(defmethod scale ((tri triangle) coeff center)
+  (dolist (vertex (vertices-mut tri))
+    (scale vertex coeff center))
+  tri)
+
 ;;;
 ;;; Vlastnosti vertices, perimeter, right-triangle-p
 ;;;
@@ -37,6 +52,11 @@
   (list (copy (slot-value triangle 'vertex-a))
         (copy (slot-value triangle 'vertex-b))
         (copy (slot-value triangle 'vertex-c))))
+
+(defmethod vertices-mut ((triangle triangle))
+  (list (slot-value triangle 'vertex-a)
+        (slot-value triangle 'vertex-b)
+        (slot-value triangle 'vertex-c)))
 
 ;; lecture-1 exercise-3 : def method perimeter
 (defmethod perimeter ((triangle triangle))
