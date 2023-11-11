@@ -2,7 +2,7 @@
 ;;;;
 ;;;; Zdrojový soubor k předmětu Paradigmata programování 3
 ;;;;
-;;;; Přednáška 4, Dědičnost
+;;;; Přednáška 5, Návrh stromu dědičnosti
 ;;;;
 
 #|
@@ -68,6 +68,7 @@ filledp), geometrické transformace, kreslení.
 
 (defmethod do-draw ((shape shape) mgw) 
   shape)
+
 
 ;; Základní chování pro každý grafický objekt
 (defmethod draw ((shape shape) mgw)
@@ -259,7 +260,9 @@ když transformace nedělají nic.
 Třída compound-shape slouží jako předek složených grafických objektů, tedy 
 těch, co mají vlastnost items.
 
-Nepředpokládáme vytváření přímých instancí.
+Nepředpokládáme vytváření přímých instancí. Práce s vlastností items je
+připravena, ale je zařízeno, aby items nešlo nastavit - prekondice metody
+set-items není nikdy splněna.
 |#
 
 (defclass compound-shape (shape)
@@ -273,6 +276,7 @@ Nepředpokládáme vytváření přímých instancí.
 (defmethod items ((shape compound-shape)) 
   (copy-list (slot-value shape 'items)))
 
+
 ;; Pomocná zpráva, posílá danou zprávu s danými argumenty všem prvkům
 (defmethod send-to-items ((shape compound-shape) 
 			  message
@@ -282,7 +286,7 @@ Nepředpokládáme vytváření přímých instancí.
   shape)
 
 (defmethod check-item ((shape compound-shape) item)
-  (error "Method check-item of compound-shape must be rewritten."))
+  (error "Invalid compound-shape item"))
 
 (defmethod do-check-items ((shape compound-shape) item-list)
   (dolist (item item-list)
@@ -290,11 +294,14 @@ Nepředpokládáme vytváření přímých instancí.
   shape)
 
 (defmethod check-items ((shape compound-shape) item-list)
-  (error "Method check-items of compound-shape must be rewritten.")
-  shape)
+  (error "Invalid items."))
 
 (defmethod set-items ((shape compound-shape) value)
   (check-items shape value)
+  (do-set-items shape value)
+  shape)
+
+(defmethod do-set-items ((shape compound-shape) value)
   (setf (slot-value shape 'items) (copy-list value))
   shape)
 
@@ -302,7 +309,7 @@ Nepředpokládáme vytváření přímých instancí.
 ;;;
 ;;; Geometrické transformace
 ;;;
-
+ 
 (defmethod move ((shape compound-shape) dx dy)
   (send-to-items shape 'move dx dy)
   shape)
@@ -318,10 +325,19 @@ Nepředpokládáme vytváření přímých instancí.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
-;;; Třída picture
+;;; Třída abstract-picture
 ;;;
 
-(defclass picture (compound-shape)
+#|
+U některých obrázků nechceme, aby uživatel mohl nastavovat items, protože
+by je uvedl do nekonzistentního stavu (třeba u bulls-eye). Ty budou potomky
+přímo této třídy.
+
+Instance takových tříd budou s items pracovat přes interní zprávu
+do-set-items.
+|#
+
+(defclass abstract-picture (compound-shape)
   ((items :initform '())))
 
 
@@ -329,19 +345,17 @@ Nepředpokládáme vytváření přímých instancí.
 ;;; Práce s items
 ;;;
 
-(defmethod check-item ((p picture) item)
+(defmethod check-item ((p abstract-picture) item)
   (unless (typep item 'shape)
-    (error "Items of picture must be shapes.")))
-
-(defmethod check-items ((p picture) items)
-  (do-check-items p items))
+    (error "Invalid picture element type."))
+  p)
 
 
 ;;;
 ;;; Kreslení
 ;;;
 
-(defmethod draw ((pic picture) mg-window)
+(defmethod draw ((pic abstract-picture) mg-window)
   (dolist (item (reverse (items pic)))
     (draw item mg-window))
   pic)
@@ -350,8 +364,33 @@ Nepředpokládáme vytváření přímých instancí.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
-;;; Třída polygon
+;;; Třída picture
 ;;;
+
+#|
+Tato třída povoluje u obrázků libovolné nastavování items.
+|#
+
+(defclass picture (abstract-picture)
+  ())
+
+(defmethod check-items ((p picture) item-list)
+  (do-check-items p item-list))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;; Třída abstract-polygon
+;;; 
+
+#|
+U některých polygonů nechceme, aby uživatel mohl nastavovat items, protože
+by je uvedl do nekonzistentního stavu (třída čtyřúhelník). Ty budou potomky
+přímo této třídy.
+
+Instance takových tříd budou s items pracovat přímo jako se slotem.
+- to je volnější princip zapouzdření.
+|#
 
 #|
 Proti třídě shape obsahuje polygon novou grafickou vlastnost: closedp.
@@ -359,87 +398,110 @@ Musíme ji tedy definovat (nový slot, přístupové metody, doplnění do
 set-mg-params).
 |#
 
-(defclass polygon (compound-shape)
-  ((items :initform '())
-   (closedp :initform t)))
+(defclass abstract-polygon (compound-shape)
+  ((closedp :initform t)))
 
-(defmethod closedp ((p polygon))
-  (slot-value p 'closedp))
-
-(defmethod set-closedp ((p polygon) value)
-  (setf (slot-value p 'closedp) value)
+(defmethod check-item ((p abstract-polygon) item)
+  (unless (typep item 'point)
+    (error "Invalid polygon element type."))
   p)
 
+(defmethod closedp ((p abstract-polygon))
+  (slot-value p 'closedp))
 
-;;;
-;;; Práce s items
-;;;
-
-(defmethod check-item ((p polygon) item)
-  (unless (typep item 'point)
-    (error "Items of polygon must be points.")))
-
-(defmethod check-items ((p polygon) items)
-  (do-check-items p items))
+(defmethod set-closedp ((p abstract-polygon) value)
+  (setf (slot-value p 'closedp) value)
+  p)
 
 
 ;;;
 ;;; Kreslení
 ;;;
 
-(defmethod set-mg-params ((p polygon) mgw) 
+(defmethod set-mg-params ((p abstract-polygon) mgw) 
   (call-next-method)
   (mg:set-param mgw :closedp (closedp p))
   p)
 
-(defmethod polygon-coordinates ((p polygon))
+(defmethod polygon-coordinates ((p abstract-polygon))
   (let (coordinates)
     (dolist (point (reverse (items p)))
       (setf coordinates (cons (y point) coordinates)
             coordinates (cons (x point) coordinates)))
     coordinates))
 
-(defmethod do-draw ((poly polygon) mg-window) 
+(defmethod do-draw ((poly abstract-polygon) mg-window) 
   (mg:draw-polygon mg-window 
                    (polygon-coordinates poly))
   poly)
 
- 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
-;;; Třída window
+;;; Třída polygon
 ;;;
 
 #|
-Třída zůstává beze změny.
+Tato třída povoluje u polygonů libovolné nastavování items.
 |#
+ 
+(defclass polygon (abstract-polygon)
+  ())
 
-(defclass window ()
+(defmethod check-items ((p polygon) item-list)
+  (do-check-items p item-list))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;; Třída abstract-window
+;;;
+
+(defclass abstract-window ()
   ((mg-window :initform (mg:display-window))
    (shape :initform nil)
    (background :initform :white)))
 
-(defmethod shape ((w window))
+(defmethod shape ((w abstract-window))
   (slot-value w 'shape))
 
-(defmethod set-shape ((w window) shape)
+(defmethod check-shape ((w abstract-window) shape)
+  (error "Cannot set shape of abstract-window"))
+
+(defmethod set-shape ((w abstract-window) shape)
+  (check-shape w shape)
+  (do-set-shape w shape))
+
+(defmethod do-set-shape ((w abstract-window) shape)
   (setf (slot-value w 'shape) shape)
   w)
 
-(defmethod background ((w window))
+(defmethod background ((w abstract-window))
   (slot-value w 'background))
 
-(defmethod set-background ((w window) color)
+(defmethod set-background ((w abstract-window) color)
   (setf (slot-value w 'background) color)
   w)
 
-(defmethod redraw ((window window))
+(defmethod redraw ((window abstract-window))
   (let ((mgw (slot-value window 'mg-window)))
     (mg:set-param mgw :background (background window))
     (mg:clear mgw)
     (when (shape window)
       (draw (shape window) mgw)))
   window)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;; Třída window
+;;;
+
+(defclass window (abstract-window)
+  ())
+
+(defmethod check-shape ((w window) shape)
+  t)
 
 
 
